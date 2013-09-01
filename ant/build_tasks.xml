@@ -2,12 +2,17 @@
 <!-- @author sodinochen
 	项目构建的各种任务集合
  -->
-<project name="params" default="" basedir="../">
+<project name="tasks" default="" basedir="../">
     <import file="${basedir}/ant/build_params.xml"/>
+    
+    <property environment="env"/>
     <!-- 工具常量 -->
     <!-- android相关 -->
     <property name="androidjar" value="${env.ANDROID_HOME}/platforms/android-${android_version}/android.jar"/>
     <property name="android_framework" value="${env.ANDROID_HOME}/platforms/android-${android_version}/framework.aidl"/>
+    <property name="googlemapslib" value="${env.ANDROID_HOME}/add-ons/addon-google_apis-google-${android_version}/libs"></property>
+	
+    <property name="lint" value="${env.ANDROID_HOME}/tools/lint"/>
     <property name="aapt" value="${env.ANDROID_HOME}/build-tools/android-4.2.2/aapt"/>
     <property name="aidl" value="${env.ANDROID_HOME}/build-tools/android-4.2.2/aidl"/>
     <property name="dx" value="${env.ANDROID_HOME}/build-tools/android-4.2.2/dx"/>
@@ -15,11 +20,73 @@
     <property name="jarsigner" value="${env.JAVA_HOME}/bin/jarsigner"/>
     
     <!-- 工程目录、文件常量 -->
+    <!-- 存放自定义的第三方引用类库 -->
+    <property name="src" value="${project_path}/src"></property>
+    <property name="lib" value="${project_path}/lib"></property>
+    
     <property name="gen" value="${project_path}/gen"></property>
     <property name="res" value="${project_path}/res"></property>
-    <property name="res" value="${project_path}/res"></property>
+    <property name="assets" value="${project_path}/assets"></property>
     
+    <property name="bin" value="${project_path}/bin"></property>
+    <property name="classes" value="${bin}/classes"></property>
+	
+    <property name="classes.dex" value="${bin}/classes.dex"></property>
+	<property name="resources.arsc" value="${bin}/resources.arsc"></property>
+	
+	<property name="unsign.apk" value="${bin}/${file_name}_unsign.apk"/>
+	<property name="sign.apk" value="${bin}/${file_name}_sign.apk"/>
     <!-- 干活思密达... -->
+    <!-- 预处理，将用到javac的地方都批量自设置指定的参数值 -->
+    <!-- includeantruntime:在Ant1.8之前，Ant把自己的Runtime相关的classpath添加到javac的的classpath,不论你愿不愿意。
+    		这可能导致某些编译操作与Ant的classpath互相冲突。
+    		所以1.8之后增加了这个开关，推荐一般设置为false，这样即可与Ant Runtime脱离开。
+     -->
+	<presetdef name="javac">
+		<javac includeantruntime="false" failonerror="true"/>
+	</presetdef>
+	<!-- 预处理，将用到exec的地方都批量自设置指定的参数值 -->
+	<presetdef name="exec">
+		<exec failonerror="true" />
+	</presetdef>
+	<!-- 预处理，将用到apply的地方都批量自设置指定的参数值 -->
+	<presetdef name="apply">
+		<apply failonerror="true" />
+	</presetdef>
+	<!-- 预处理，将用到java的地方都批量自设置指定的参数值 -->
+	<presetdef name="java">
+		<java failonerror="true" />
+	</presetdef>
+	
+    <target name="init">
+        <echo message="Initialize some folder..."></echo>
+        <mkdir dir="${bin}"/>
+        <!-- 删除指定文件夹下的所有文件及文件夹，但保留指定文件夹本身 -->
+        <delete includeemptydirs="true">
+            <fileset dir="${bin}" includes="**/*"></fileset>
+        </delete>
+        
+        <mkdir dir="${gen}"/>
+        <delete includeemptydirs="true">
+            <fileset dir="${gen}" includes="**/*"></fileset>
+        </delete>
+        
+        <mkdir dir="${classes}"/>
+        <delete includeemptydirs="true">
+            <fileset dir="${classes}" includes="**/*"></fileset>
+        </delete>
+    </target>
+    
+    <target name="lint">
+        <echo message="Run Lint to find potential bugs..."></echo>
+        <exec executable="${lint}">
+            <arg value="--exitcode"/>
+            <arg value="--html"/>
+            <arg value="${project_path}/bin/lint.check.html"/>
+            <arg value="${project_path}"/>
+        </exec>
+    </target>
+    
     <!-- 生成R.java文件... -->
     <target name="generate">
         <echo message="Generating R.java from the resources..."></echo>
@@ -36,17 +103,151 @@
             <arg value="${androidjar}" />
         </exec>
     </target>
-    
+        
     <!-- 由.aidl生成.java文件 -->
+    <!-- failonerror:当此target执行失败时，将不再进行下一个target的操作，ant直接退出
+    	 -p:表示编译aidl生成.java时所需要导入的预处理文件
+		 -I:表示aidl的源码存放目录，该目录表示其声明的package/import的父目录。
+	    	如：IRemoteService.aidl中声明package com.example.android.apis.app;
+	    	则指定的"-I"为com的父目录即"${src}"。
+	    	可添加多个。
+     	 -o:生成的.class的存放目录
+		 fileset指明需要参与编译的所有的*.aidl文件路径集合 -->
+	<!-- 使用apply需要至少使用到一个fileset或filelist,并且最多使用一个mapper.
+		 当没有使用fileset/filelist时，会提示“no resources specified”
+	 -->
     <target name="aidl">
         <echo message="Compiling aidl files into Java classes..."></echo>
-		<apply executable="${aidl}" failonerror="true">
+		<apply executable="${aidl}">
 	        <arg value="-p${android_framework}" />
-			<arg value="-I${project_path}/src" />
+			<arg value="-I${src}" />
 			<arg value="-o${gen}" />
-            <fileset dir="${project_path}">
+            <fileset dir="${src}">
                 <include name="**/*.aidl"/>
             </fileset>
         </apply>
     </target>
+    
+    <!-- 编译生成.class文件到bin文件夹中去。在此过程中如果发生了错误，会把错误日志打印出来 -->
+    <!-- encoding:指定编译文件的字符集
+    	 debug:值为true时将保留所有的调试信息,如:lines(代码行号),vars(局部变量),source(源文件信息)
+				同javac中的"-g",当debug值为false时，同"-g:none"
+		 extdirs:(不懂，搜索来的)联编选项,根据指定的扩展目录进行联编。目录是以分号分隔的目录列表。在指定目录的每个 JAR 归档文件中查找类文件。
+		 destdir:存储生成的.class文件的目录
+		 bootclasspath:联编选项,指定编译器根据指定版本的api进行编译，做到完全对该版本的兼容。
+		 src:.java文件目录
+		 classpath:外部扩展类库
+     -->
+    <target name="compile">
+        <echo message="Compiling java files into Java classes..."></echo>
+        <javac encoding="${encoding}" 
+        	debug="true"
+        	extdirs="" 
+        	target="1.6" 
+            destdir="${classes}"
+            bootclasspath="${androidjar}">
+        	<src path="${src}"/>
+        	<src path="${gen}"/>
+        	<!-- 注意：fileset表示的文件必须真实存在 -->
+            <!-- 由于此处没有引用到扩展类库，所以先注释掉了...
+            <classpath>
+                <fileset dir="${lib}" includes="*.jar"/>
+				<fileset dir="${googlemapslib}" includes="*.jar"/>
+            </classpath> 
+             -->
+            <!-- 此设置会输出一系列自检结果，刷屏了...,屏蔽掉 -->
+            <!-- 
+            <compilerarg value="-Xlint"/>
+             -->
+         </javac>
+    </target>
+    
+	<!-- 将.class文件转换为.dex -->
+	<target name="dx">
+	    <echo message="Convert all .class files into a dex file..."></echo>
+	    <exec executable="${dx}">
+            <arg value="--dex" />
+            <arg value="--output=${classes.dex}" />
+            <arg path="${classes}" />
+			<!-- 如果有外部扩展类库，则使用下面的fileset:指定将lib目录下的corelibs相关的jar一块打包到dex文件中
+				 如果使用了fileset，则可以使用apply了，否则会提示“no resources specified”
+            	<fileset dir="${lib}" includes="${corelibs}"/> 
+			 -->
+        </exec>
+	</target>
+	
+	<!-- 将assets、res下的各种东西打包到arsc中去... -->
+	<!-- package:打包命令
+		 -f:对已经存在的文件进行强制覆盖
+		 -M:指定将要打包进zip内的AndroidManifest.xml的完整路径
+		 -S:指定存放资源的目录
+		 -A:指定的存放额外原始资源文件的目录
+		 -I:指定基础引用包
+		 -F:指定打出来的zip最后的生成路径
+	 -->
+	<target name="arsc">
+	    <echo message="Package assets and resources into resources.arsc"></echo>
+	    <exec executable="${aapt}">
+            <arg value="package" />
+            <arg value="-f" />
+            <arg value="-M" />
+            <arg value="${project_path}/AndroidManifest.xml" />
+            <arg value="-S" />
+            <arg value="${res}" />
+            <arg value="-A" />
+            <arg value="${assets}" />
+            <arg value="-I" />
+            <arg value="${androidjar}" />
+            <arg value="-F" />
+            <arg value="${resources.arsc}" />
+	    </exec>
+	</target>
+	
+    <!-- 打包，生成未签名的APK -->
+    <target name="release">
+        <echo>Packaging ${out-unsigned-package} for release...</echo>
+        <java classname="com.android.sdklib.build.ApkBuilderMain">
+            <classpath>
+                <pathelement location="${env.ANDROID_HOME}/tools/lib/sdklib.jar"/>
+            </classpath>
+            <arg value="${unsign.apk}" />
+			<!-- 会输出一大串日志，注释掉
+			<arg value="-v" />
+			-->
+            <arg value="-u" />
+            <arg value="-z" />
+            <arg value="${resources.arsc}" />
+            <arg value="-f" />
+            <arg value="${classes.dex}" />
+            <arg value="-rf" />
+            <arg value="${src}" />
+            <!-- 引用外部类库，暂不考虑 
+            <arg value="-rj" />
+            <arg value="${lib}" />
+            <arg value="-nf" />
+            <arg value="${lib}" /> 
+            -->
+        </java>
+    </target>
+
+	<target name="sign">
+		<echo>begin sign: ${bin}</echo>
+		<exec executable="${jarsigner}">
+			<arg value="-keystore"/> 
+			<arg value="${keystore}"/>
+			<arg value="-storepass"/>
+			<arg value="${keystore.password}"/>
+			<arg value="-keypass"/>
+			<arg value="${keystore.password}"/>
+			<arg value="-digestalg"/>
+			<arg value="SHA1"/>
+			<arg value="-sigalg"/>
+			<arg value="MD5withRSA"/>
+			<arg value="-signedjar"/>
+			<arg value="${sign.apk}"/>
+			<arg value="${unsign.apk}"/>
+			<arg value="${keystore.name}"/>
+		</exec>	
+	</target>
+    
 </project>
