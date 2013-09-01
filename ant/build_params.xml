@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- @author sodinochen
+	项目构建的各种参数定义集合
+ -->
+<project name="params" default="" basedir="../">
+    <property environment="env"/>
+	<!-- 工程路径 -->
+    <property name="project_path" value="${basedir}"/>
+    <!-- 编译使用的ANDROID_SDK版本号 -->
+    <property name="android_version" value="16"/>
+    
+</project>

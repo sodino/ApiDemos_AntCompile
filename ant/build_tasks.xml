@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- @author sodinochen
+	项目构建的各种任务集合
+ -->
+<project name="params" default="" basedir="../">
+    <import file="${basedir}/ant/build_params.xml"/>
+    <!-- 工具常量 -->
+    <!-- android相关 -->
+    <property name="androidjar" value="${env.ANDROID_HOME}/platforms/android-${android_version}/android.jar"/>
+    <property name="android_framework" value="${env.ANDROID_HOME}/platforms/android-${android_version}/framework.aidl"/>
+    <property name="aapt" value="${env.ANDROID_HOME}/build-tools/android-4.2.2/aapt"/>
+    <property name="aidl" value="${env.ANDROID_HOME}/build-tools/android-4.2.2/aidl"/>
+    <property name="dx" value="${env.ANDROID_HOME}/build-tools/android-4.2.2/dx"/>
+	<!-- Java命令相关 -->
+    <property name="jarsigner" value="${env.JAVA_HOME}/bin/jarsigner"/>
+    
+    <!-- 工程目录、文件常量 -->
+    <property name="gen" value="${project_path}/gen"></property>
+    <property name="res" value="${project_path}/res"></property>
+    <property name="res" value="${project_path}/res"></property>
+    
+    <!-- 干活思密达... -->
+    <!-- 生成R.java文件... -->
+    <target name="generate">
+        <echo message="Generating R.java from the resources..."></echo>
+        <exec executable="${aapt}">
+            <arg value="package" />
+            <arg value="-m" />
+            <arg value="-J" />
+            <arg value="${gen}" />
+            <arg value="-M" />
+            <arg value="${project_path}/AndroidManifest.xml" />
+            <arg value="-S" />
+            <arg value="${res}" />
+            <arg value="-I" />
+            <arg value="${androidjar}" />
+        </exec>
+    </target>
+    
+    <!-- 由.aidl生成.java文件 -->
+    <target name="aidl">
+        <echo message="Compiling aidl files into Java classes..."></echo>
+		<apply executable="${aidl}" failonerror="true">
+	        <arg value="-p${android_framework}" />
+			<arg value="-I${project_path}/src" />
+			<arg value="-o${gen}" />
+            <fileset dir="${project_path}">
+                <include name="**/*.aidl"/>
+            </fileset>
+        </apply>
+    </target>
+</project>

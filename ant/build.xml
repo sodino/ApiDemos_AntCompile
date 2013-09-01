@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="ApkPack" default="buildDebug" basedir="../">
+    <import file="${basedir}/ant/build_tasks.xml"/>
+    <target name="buildDebug">
+        <antcall target="test" />
+        <antcall target="generate" />
+        <antcall target="aidl" />
+    </target>
+    
+    <target name="test">
+        <echo message="project_path=${project_path}"></echo>
+        <echo message="env.android_home=${env.ANDROID_HOME}"></echo>
+        <echo message="env.java_home=${env.JAVA_HOME}"></echo>
+    </target>
+</project>
