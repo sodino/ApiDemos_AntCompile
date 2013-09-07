@@ -11,6 +11,7 @@
         <antcall target="dx" />
         <antcall target="arsc" />
         <antcall target="release" />
+        <antcall target="sign" />
         <antcall target="zipalign" />
     </target>
     
